@@ -1,11 +1,11 @@
 const express = require("express");
 const cookieParser = require("cookie-parser");
+const connectToDb = require("./utils/connectDb");
+const UserModel = require("./models/userModel");
 
 const app = express();
 
 const port = 7000;
-
-const users = [];
 
 app.set("view engine", "ejs");
 
@@ -13,24 +13,34 @@ app.set("view engine", "ejs");
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-app.get("/", (req, res) => {
+connectToDb();
+
+const isAuthenticated = (req, res, next) => {
   const { token } = req.cookies;
   console.log({ token });
 
   if (token) {
-    console.log("Token is present!");
-    res.render("logout");
+    next();
   } else {
     console.log("Token is NOT present!");
     res.render("login");
   }
+};
+
+app.get("/", isAuthenticated, (req, res) => {
+  console.log("Token is present!");
+  res.render("logout");
+});
+
+app.get("/see", isAuthenticated, (req, res) => {
+  res.send("Page is accessible only when the user is logged in!");
 });
 
 app.get("/login", (req, res) => {
   res.render("login", { clubName: "Chelsea", clubName2: "Liverpool" });
 });
 
-app.post("/submit-form", (req, res) => {
+app.post("/submit-form", async (req, res) => {
   console.log(req.body);
 
   const { email, password } = req.body;
@@ -38,11 +48,14 @@ app.post("/submit-form", (req, res) => {
   if (req.body === undefined) {
     res.send("Something wrong with submitting the form");
   } else {
-    res.cookie("token", "User logged in!", {
+    const user = await UserModel.create({ email, password })
+      .then(() => console.log("User created!"))
+      .catch((err) => console.log(err));
+
+    res.cookie("token", user?._id, {
       httpOnly: true,
     });
 
-    users.push({ emailOfUser: email, passwordOfUser: password });
     res.redirect("/");
   }
 });
@@ -54,10 +67,6 @@ app.get("/logout", (req, res) => {
   });
 
   res.redirect("/login");
-});
-
-app.get("/users", (req, res) => {
-  res.json({ users });
 });
 
 app.listen(port, () => {
